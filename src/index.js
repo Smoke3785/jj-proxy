@@ -9,6 +9,14 @@ const app = require('express')();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 app.use(function (req, res, next) {
+  console.log(
+    `[${new Date().toLocaleString()}] ${req.method}: ${req.originalUrl}`
+  );
+
+  next();
+});
+
+app.use(function (req, res, next) {
   var data = '';
   req.setEncoding('utf8');
   req.on('data', function (chunk) {
@@ -29,10 +37,7 @@ app.all('*', function (request, response) {
     return;
   }
 
-  console.log(urlAffix.toLowerCase());
-
   // Proxy the request to iliad.dev with original headers and body
-
   agent[request.method.toLowerCase()](`https://${endpoint}` + urlAffix) // Send the original URL to iliad.dev
     .buffer(true) // Buffer the response, necessary for non-text data like images
     .set({
@@ -53,23 +58,29 @@ app.all('*', function (request, response) {
         });
       }
 
+      console.log('response', res);
+
       // Handle different types of content, including binary data like images
-      if (res.headers['content-type']) {
-        response.set('Content-Type', res.headers['content-type']); // Set the correct content type
+      // if (res.headers['content-type']) {
+      //   response.set('Content-Type', res.headers['content-type']); // Set the correct content type
+      // }
+
+      // if (res.headers['content-length']) {
+      //   response.set('Content-Length', res.headers['content-length']); // Set the content length for proper transfer
+      // }
+
+      for (const [key, value] of Object.entries(res.headers)) {
+        response.set(key, value); // Forward all the headers from the response
       }
 
-      if (res.headers['content-length']) {
-        response.set('Content-Length', res.headers['content-length']); // Set the content length for proper transfer
-      }
-
-      res.headers['x-iliad-proxy'] = `Proxy server by Iliad.dev`; // Add a custom header to the response
+      response.set('x-iliad-proxy', `Proxy server by Iliad.dev`); // Add a custom header to the response
 
       // Serve binary content as buffer
       if (res.body && Buffer.isBuffer(res.body)) {
-        response.send(res.body); // Send binary data like images, CSS, JS, etc.
+        response.status(res.statusCode).send(res.body); // Send binary data like images, CSS, JS, etc.
       } else {
         // Handle text (HTML, CSS, JS, etc.)
-        response.send(res.text); // Send text-based content
+        response.status(res.statusCode).send(res.text); // Send text-based content
       }
     });
 });
